@@ -9,6 +9,8 @@
 
 ### Unreleased
 
+* Update dynamic background color to match AOSP Settings ([PR #204])
+
 ### Version 6.2
 
 * Update target API version to API 37 (Android 17) ([PR #202])
@@ -467,3 +469,4 @@ Changes:
 [PR #195]: https://github.com/chenxiaolong/Custota/pull/195
 [PR #196]: https://github.com/chenxiaolong/Custota/pull/196
 [PR #202]: https://github.com/chenxiaolong/Custota/pull/202
+[PR #204]: https://github.com/chenxiaolong/Custota/pull/204
