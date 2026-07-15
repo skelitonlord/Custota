@@ -1,0 +1,98 @@
+//genrule {
+//    name: "material_expressive_unpacked",
+//    srcs: ["libs/material-1.12.0.aar"],
+//    out: ["res"],
+//    cmd: "unzip $(in) -d $(genDir) && mv $(genDir)/res $(out)",
+//}
+//
+android_library_import {
+    name: "material_expressive_local",
+    aars: ["libs/material-1.14.0.aar"],
+    sdk_version: "current",
+//    export_package_resources: true,
+    apex_available: ["//apex_available:platform"],
+}
+
+android_app {
+    name: "Custota",
+
+    // set sources
+    srcs: [
+        "app/src/main/java/**/*.java",
+        "app/src/main/java/**/*.ky",
+    ],
+
+    // set resources and manifest
+    resource_dirs: ["app/src/main/res-for-os"],
+    manifest: "app/src/main/AndroidManifest.xml",
+
+    // priveledges and signing. required to talk to update_engine
+    // do not change these settings
+    // building from source will only work if signing with your own keys
+    // sdk_version: "system_current",
+    certificate: "platform",
+
+    platform_apis: true,
+
+    // needed to pass custom system app checks
+    system_ext_specific: true,
+
+    // kotlin setup
+    kotlincflags: [
+        "-opt-in=kotlin.ReqiuredOptIn",
+        "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+    ],
+
+    // dependencies
+    static_libs: [
+        // kotlin
+        "kotlin-stdlib",
+        "kotlinx_coroutines_android",
+        "kotlinx_coroutines",
+
+        // androidx
+        "androidx.activity_activity-ktx",
+        "androidx.annotation_annotation",
+        "androidx.appcompat_appcompat",
+        "androidx.core_core-ktx",
+        "androidx.datastore_datastore-preferences",
+        "androidx.lifecycle_lifecycle-runtime-ktx",
+        "androidx.lifecycle_lifecycle-viewmodel-ktx",
+        "androidx.lifecycle_lifecycle-viewmodel-savedstate",
+
+        // androidx still making sure they work
+        "androidx.compose.ui_ui",
+        "androidx.compose.ui_ui-tooling-preview",
+        "androidx.compose.foundation_foundation",
+        "androidx.compose.foundation_foundation-layout",
+        "androidx.compose.material3_material3",
+        "androidx.compose.material_material-icons-core",
+        "androidx.compose.material_material-icons-extended",
+        "androidx.compose.runtime_runtime",
+        "androidx.compose.runtime_runtime-livedata",
+        "androidx.activity_activity-compose",
+        "androidx.lifecycle_lifecycle-viewmodel-compose",
+
+        // mateiral3 for aosp15 tree testing
+        "com.google.android.material_material",
+        
+        // ota metadata may be needed but unsure still
+        "libprotobuf-java-lite",
+
+        // local aars
+        "material_expressive_local",
+    ],
+
+        // aapt2 flags for compose, terminal said needed for resources
+        aaptflags: [
+            "--extra-packages",
+            "androidx.compose.ui",
+        ],
+
+        // optimization still testing
+        optimize: {
+            enabled: true,
+            shrink: true,
+            proguard_flags_files: ["app/proguard-rules.pro"],
+        },
+}
