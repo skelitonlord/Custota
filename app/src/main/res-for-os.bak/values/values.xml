@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+           xmlns:app="http://schemas.android.com/apk/res-auto">
+  
+  <style name="Theme.Material3Expressive.DynamicColors.DayNight.NoActionBar" parent="Theme.Material3Expressive.DynamicColors.Light.NoActionBar"/>
+    
+  <style name="Theme.Material3.Dark.Dialog.Alert.FocusRings">
+  <item name="focusRingsEnabled">true</item>  
+  <item name="android:selectableItemBackground">@drawable/m3_focus_ring_item_background</item>
+  <item name="selectableItemBackground">@drawable/m3_focus_ring_item_background</item>
+  <item name="android:selectableItemBackgroundBorderless">@drawable/m3_focus_ring_item_background_borderless</item>
+  <item name="selectableItemBackgroundBorderless">@drawable/m3_focus_ring_item_background_borderless</item>
+  <item name="android:actionBarItemBackground">@drawable/m3_focus_ring_action_bar_item_background</item>
+  <item name="actionBarItemBackground">@drawable/m3_focus_ring_action_bar_item_background</item>
+  <item name="controlBackground">@drawable/m3_focus_ring_control_background</item>
+  <item name="android:listChoiceBackgroundIndicator">@drawable/m3_focus_ring_list_selector_background</item>
+  <item name="listChoiceBackgroundIndicator">@drawable/m3_focus_ring_list_selector_background</item>
+  <item name="toolbarNavigationButtonBackground">@drawable/m3_focus_ring_control_background</item>
+  <item name="materialToolbarSelectableItemBackground">@drawable/m3_focus_ring_toolbar_selectable_item_background</item>
+  <item name="materialToolbarSelectableItemBackgroundBorderless">@drawable/m3_focus_ring_toolbar_selectable_item_background_borderless</item>
+  <item name="materialToolbarActionBarItemBackground">@drawable/m3_focus_ring_toolbar_action_bar_item_background</item>
+  <item name="android:buttonStyle">@style/Widget.Material.Button.FocusRing</item>
+  <item name="buttonStyle">@style/Widget.Material.Button.FocusRing</item>
+  <item name="android:buttonStyleSmall">@style/Widget.Material.Button.Small.FocusRing</item>
+  <item name="buttonStyleSmall">@style/Widget.Material.Button.Small.FocusRing</item>
+  <item name="android:borderlessButtonStyle">@style/Widget.Material.Button.Borderless.FocusRing</item>
+  <item name="android:imageButtonStyle">@style/Widget.Material.ImageButton.FocusRing</item>
+  <item name="imageButtonStyle">@style/Widget.Material.ImageButton.FocusRing</item>
+  <item name="android:checkboxStyle">@style/Widget.Material.CompoundButton.CheckBox.FocusRing</item>
+  <item name="android:radioButtonStyle">@style/Widget.Material.CompoundButton.RadioButton.FocusRing</item>
+</style>
+
+  <style name="Theme.Material3.Dark.Dialog.FocusRings">
+  <item name="focusRingsEnabled">true</item>
+  <item name="android:selectableItemBackground">@drawable/m3_focus_ring_item_background</item>
+  <item name="selectableItemBackground">@drawable/m3_focus_ring_item_background</item>
+  <item name="android:selectableItemBackgroundBorderless">@drawable/m3_focus_ring_item_background_borderless</item>
+  <item name="selectableItemBackgroundBorderless">@drawable/m3_focus_ring_item_background_borderless</item>
+  <item name="android:actionBarItemBackground">@drawable/m3_focus_ring_action_bar_item_background</item>
+  <item name="actionBarItemBackground">@drawable/m3_focus_ring_action_bar_item_background</item>
+  <item name="controlBackground">@drawable/m3_focus_ring_control_background</item>
+  <item name="android:listChoiceBackgroundIndicator">@drawable/m3_focus_ring_list_selector_background</item>
+  <item name="listChoiceBackgroundIndicator">@drawable/m3_focus_ring_list_selector_background</item>
+  <item name="toolbarNavigationButtonBackground">@drawable/m3_focus_ring_control_background</item>
+  <item name="materialToolbarSelectableItemBackground">@drawable/m3_focus_ring_toolbar_selectable_item_background</item>
+  <item name="materialToolbarSelectableItemBackgroundBorderless">@drawable/m3_focus_ring_toolbar_selectable_item_background_borderless</item>
+  <item name="materialToolbarActionBarItemBackground">@drawable/m3_focus_ring_toolbar_action_bar_item_background</item>
+  <item name="android:buttonStyle">@style/Widget.Material.Button.FocusRing</item>
+  <item name="buttonStyle">@style/Widget.Material.Button.FocusRing</item>
+  <item name="android:buttonStyleSmall">@style/Widget.Material.Button.Small.FocusRing</item>
+  <item name="buttonStyleSmall">@style/Widget.Material.Button.Small.FocusRing</item>
+  <item name="android:borderlessButtonStyle">@style/Widget.Material.Button.Borderless.FocusRing</item>
+  <item name="android:imageButtonStyle">@style/Widget.Material.ImageButton.FocusRing</item>
+  <item name="imageButtonStyle">@style/Widget.Material.ImageButton.FocusRing</item>
+  <item name="android:checkboxStyle">@style/Widget.Material.CompoundButton.CheckBox.FocusRing</item>
+  <item name="android:radioButtonStyle">@style/Widget.Material.CompoundButton.RadioButton.FocusRing</item>
+</style>
+
+</resources>         
