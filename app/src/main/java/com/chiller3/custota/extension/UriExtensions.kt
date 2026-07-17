@@ -31,9 +31,9 @@ val Uri.formattedString: String
 
             // If this looks like a SAF tree/document URI, then try and show the document ID. This
             // cannot be implemented in a way that prevents all false positives.
-            when (segments.size) {
-                4 if segments[0] == "tree" && segments[2] == "document" -> prefix + segments[3]
-                2 if (segments[0] == "tree" || segments[0] == "document") -> prefix + segments[1]
+            when {
+                segments.size == 4 && segments[0] == "tree" && segments[2] == "document" -> prefix + segments[3]
+                segments.size == 2 && (segments[0] == "tree" || segments[0] == "document") -> prefix + segments[1]
                 else -> toString()
             }
         }
@@ -45,4 +45,4 @@ val Uri.isGuaranteedLocalFile: Boolean
             || scheme == ContentResolver.SCHEME_FILE
 
 val Uri.isGuaranteedNetworkUri: Boolean
-    get() = scheme != ContentResolver.SCHEME_CONTENT && scheme != ContentResolver.SCHEME_FILE
+    get() = scheme != ContentResolver.SCHEME_CONTENT && scheme != ContentResolver.SCHEME_FILEz

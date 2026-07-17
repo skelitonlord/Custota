@@ -1,0 +1,96 @@
+android_library_import {
+    name: "material-1.14.0.aar",
+    aars: ["libs/material-1.14.0.aar"],
+    sdk_version: "current",
+
+    // dependencies
+    static_libs: [
+        "androidx.annotation_annotation",
+        "androidx.appcompat_appcompat",
+        "androidx.core_core-ktx",
+        "androidx-constraintlayout_constraintlayout",
+    ],
+}
+
+android_library_import {
+    name: "constraintlayout-2.2.1.aar",
+    aars: ["libs/constraintlayout-2.2.1.aar"],
+    sdk_version: "current",
+
+
+    // dependencies
+}
+
+java_library_host {
+    name: "local-compose-compiler-jar-host",
+    srcs: ["libs/compiler-hosted-1.5.15.jar"],
+}
+
+
+java_plugin {
+    name: "local-compose-compiler-plugin",
+    static_libs: ["local-compose-compiler-jar-host"],
+    processor_class: "androidx.compose.compiler.plugins.kotlin.ComposePluginRegistrar",
+    visibility: ["//visibility:private"],
+}
+
+android_app {
+    name: "Custota",
+
+    srcs: [
+        "app/src/main/java/**/*.java",
+        "app/src/main/java/**/*.kt",
+    ],
+
+    aidl: {
+        local_include_dirs: ["app/src/main/aidl"],
+    },
+
+    resource_dirs: ["app/src/main/res"],
+
+    manifest: "app/src/main/AndroidManifest.xml",
+
+    system_ext_specific: true,
+    platform_apis: true,
+    certificate: "platform",
+    privileged: true,
+
+    plugins: ["local-compose-compiler-plugin"],
+
+    kotlincflags: [
+        "-Xplugin=$(location :local-compose-compiler-plugin)",
+    ],
+
+    static_libs: [
+
+        // compose
+        "androidx.compose.runtime_runtime",
+        "androidx.compose.ui_ui",
+        "androidx.compose.foundation_foundation",
+        "androidx.compose.material3_material3",
+        "androidx.compose.ui_ui-tooling-preview",
+
+        // androidx jetcompose
+        "androidx.appcompat_appcompat",
+        "androidx.core_core-ktx",
+        "androidx.preference_preference",
+        "androidx.documentfile_documentfile",
+        "androidx.activity_activity-compose",
+
+        // imported libs
+        "material-1.14.0.aar",
+        "constraintlayout-2.2.1.aar",
+
+        // importeed lib dependencies
+        "androidx.cardview_cardview",
+        "androidx.coordinatorlayout_coordinatorlayout",
+        "androidx-constraintlayout_constraintlayout",
+    ],
+
+    optimize: {
+        enabled: false,
+    },
+    dex_preopt: {
+        enabled: true,
+    },
+}
