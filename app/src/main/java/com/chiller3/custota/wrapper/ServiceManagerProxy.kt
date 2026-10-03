@@ -10,14 +10,12 @@ import android.annotation.SuppressLint
 import android.os.IBinder
 
 object ServiceManagerProxy {
-    @SuppressLint("PrivateApi")
-    private val CLS = Class.forName("android.os.ServiceManager")
-
-    @SuppressLint("SoonBlockedPrivateApi")
-    private val METHOD_GET_SERVICE_OR_THROW =
-        CLS.getDeclaredMethod("getServiceOrThrow", String::class.java)
-
+    @SuppressLint("PrivateApi", "SoonBlockedPrivateApi")
     fun getServiceOrThrow(name: String): IBinder {
-        return METHOD_GET_SERVICE_OR_THROW.invoke(null, name) as IBinder
+        // A denied hidden API must be a normal call failure. Resolving it in an object
+        // initializer instead throws ExceptionInInitializerError and poisons future calls.
+        val cls = Class.forName("android.os.ServiceManager")
+        val method = cls.getDeclaredMethod("getServiceOrThrow", String::class.java)
+        return method.invoke(null, name) as IBinder
     }
 }

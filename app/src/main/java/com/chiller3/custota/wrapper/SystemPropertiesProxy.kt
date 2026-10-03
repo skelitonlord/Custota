@@ -9,11 +9,18 @@ import android.annotation.SuppressLint
 
 object SystemPropertiesProxy {
     @SuppressLint("PrivateApi")
-    private val CLS = Class.forName("android.os.SystemProperties")
-
-    private val METHOD_GET = CLS.getDeclaredMethod("get", String::class.java)
-
     fun get(key: String): String {
-        return METHOD_GET.invoke(null, key) as String
+        val cls = Class.forName("android.os.SystemProperties")
+        val method = cls.getDeclaredMethod("get", String::class.java)
+        return method.invoke(null, key) as String
+    }
+
+    /** Optional display data only. OTA validation must continue to use the strict getter. */
+    fun getOrNull(key: String): String? = try {
+        get(key).takeIf { it.isNotEmpty() }
+    } catch (_: Exception) {
+        null
+    } catch (_: LinkageError) {
+        null
     }
 }

@@ -206,11 +206,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             skipPostInstall = skipPostInstall,
             localNetworkGranted = localNetworkGranted,
             androidVersion = Build.VERSION.RELEASE,
-            securityPatchLevel = SystemPropertiesProxy.get(UpdaterThread.PROP_SECURITY_PATCH),
+            securityPatchLevel = SystemPropertiesProxy.getOrNull(UpdaterThread.PROP_SECURITY_PATCH)
+                ?: Build.VERSION.SECURITY_PATCH,
             fingerprint = Build.FINGERPRINT,
-            vbmetaDigest = SystemPropertiesProxy.get(UpdaterThread.PROP_VBMETA_DIGEST),
-            bootSlot = SystemPropertiesProxy.get("ro.boot.slot_suffix")
-                .removePrefix("_").uppercase(),
+            vbmetaDigest = SystemPropertiesProxy.getOrNull(UpdaterThread.PROP_VBMETA_DIGEST)
+                ?: stringResource(R.string.pref_bootloader_status_unknown),
+            bootSlot = SystemPropertiesProxy.getOrNull("ro.boot.slot_suffix")
+                ?.removePrefix("_")?.uppercase()
+                ?: stringResource(R.string.pref_bootloader_status_unknown),
             bootloaderStatus = bootloaderStatus,
             certificates = certificates,
             isDebugMode = isDebugMode,
