@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+set -e
+set -o pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VARIANT=debug
+TARGET=
+
+usage() {
+    printf '%s\n' \
+        "Usage:" \
+        "  ./tools/build-privileged-package [--variant debug|release] [--target GIT_REF]" \
+        "" \
+        "Defaults:" \
+        "  --variant debug" \
+        "  --target  latest upstream release tag"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --variant)
+            VARIANT="$2"
+            shift 2
+            ;;
+        --target)
+            TARGET="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+case "$VARIANT" in
+    debug|release) ;;
+    *)
+        echo "Unsupported variant: $VARIANT" >&2
+        exit 2
+        ;;
+esac
+
+git -C "$ROOT" remote get-url upstream >/dev/null
+
+COMPAT_REF="$(
+    git -C "$ROOT" log master \
+        --format='%H' \
+        --grep='^Add privileged compatibility interface$' \
+        -1
+)"
+
+if [ -z "$COMPAT_REF" ]; then
+    echo "Privileged compatibility commit not found" >&2
+    exit 1
+fi
+
+echo "=== Custota privileged package ==="
+echo "Variant:       $VARIANT"
+echo "Target:        ${TARGET:-latest upstream release}"
+echo "Compatibility: $COMPAT_REF"
+echo
+
+echo "[1/6] Fetching upstream..."
+git -C "$ROOT" fetch --quiet upstream --tags --prune
+
+if [ -z "$TARGET" ]; then
+    TARGET="$(
+        git -C "$ROOT" tag             --list 'v[0-9]*'             --sort=-version:refname             | head -1
+    )"
+
+    if [ -z "$TARGET" ]; then
+        echo "No upstream release tag found" >&2
+        exit 1
+    fi
+
+    echo "Latest release: $TARGET"
+fi
+
+TARGET_COMMIT="$(git -C "$ROOT" rev-parse "$TARGET")"
+
+echo "Target ref:    $TARGET"
+echo "Target commit: $TARGET_COMMIT"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+echo
+echo "[2/6] Creating disposable checkout..."
+
+git clone --quiet --no-hardlinks "$ROOT" "$TMP/Custota"
+
+git -C "$TMP/Custota" remote remove upstream >/dev/null 2>&1 || true
+git -C "$TMP/Custota" remote add upstream \
+    "$(git -C "$ROOT" remote get-url upstream)"
+
+git -C "$TMP/Custota" fetch --quiet upstream --tags
+git -C "$TMP/Custota" checkout --quiet --detach "$TARGET_COMMIT"
+
+echo
+echo "[3/6] Applying privileged compatibility..."
+
+COMPAT_AUTHOR_NAME="$(
+    git -C "$ROOT" show -s --format=%an "$COMPAT_REF"
+)"
+COMPAT_AUTHOR_EMAIL="$(
+    git -C "$ROOT" show -s --format=%ae "$COMPAT_REF"
+)"
+COMPAT_AUTHOR_DATE="$(
+    git -C "$ROOT" show -s --format=%aI "$COMPAT_REF"
+)"
+COMPAT_COMMITTER_NAME="$(
+    git -C "$ROOT" show -s --format=%cn "$COMPAT_REF"
+)"
+COMPAT_COMMITTER_EMAIL="$(
+    git -C "$ROOT" show -s --format=%ce "$COMPAT_REF"
+)"
+COMPAT_COMMITTER_DATE="$(
+    git -C "$ROOT" show -s --format=%cI "$COMPAT_REF"
+)"
+
+COMPAT_PATHS=(
+    app/build.gradle.kts
+    app/module/post-fs-data.sh
+    app/src/main/AndroidManifest.xml
+    app/src/main/aidl/com/chiller3/custota/external/ICustotaExternalService.aidl
+    app/src/main/java/com/chiller3/custota/updater/UpdaterService.kt
+)
+
+COMPAT_PATCH="$TMP/privileged-compat.patch"
+COMPAT_MESSAGE="$TMP/privileged-compat-message.txt"
+
+git -C "$ROOT" diff \
+    --binary \
+    "${COMPAT_REF}^" \
+    "$COMPAT_REF" \
+    -- "${COMPAT_PATHS[@]}" \
+    > "$COMPAT_PATCH"
+
+git -C "$ROOT" show \
+    -s \
+    --format=%B \
+    "$COMPAT_REF" \
+    > "$COMPAT_MESSAGE"
+
+if [ ! -s "$COMPAT_PATCH" ]; then
+    echo "Privileged compatibility patch is empty" >&2
+    exit 1
+fi
+
+if ! git -C "$TMP/Custota" apply \
+    --index \
+    --3way \
+    "$COMPAT_PATCH"
+then
+    echo "Privileged compatibility code no longer applies cleanly." >&2
+    git -C "$TMP/Custota" status --short >&2 || true
+    exit 1
+fi
+
+EXPECTED="$(
+    printf '%s\n' "${COMPAT_PATHS[@]}" | sort
+)"
+
+APPLIED="$(
+    git -C "$TMP/Custota" diff \
+        --cached \
+        --name-only \
+        | sort
+)"
+
+if [ "$APPLIED" != "$EXPECTED" ]; then
+    echo "Unexpected compatibility file set" >&2
+    echo "--- expected ---" >&2
+    printf '%s\n' "$EXPECTED" >&2
+    echo "--- applied ---" >&2
+    printf '%s\n' "$APPLIED" >&2
+    exit 1
+fi
+
+echo "Applied compatibility files:"
+printf '  %s\n' "${COMPAT_PATHS[@]}"
+
+(
+    export GIT_AUTHOR_NAME="$COMPAT_AUTHOR_NAME"
+    export GIT_AUTHOR_EMAIL="$COMPAT_AUTHOR_EMAIL"
+    export GIT_AUTHOR_DATE="$COMPAT_AUTHOR_DATE"
+    export GIT_COMMITTER_NAME="$COMPAT_COMMITTER_NAME"
+    export GIT_COMMITTER_EMAIL="$COMPAT_COMMITTER_EMAIL"
+    export GIT_COMMITTER_DATE="$COMPAT_COMMITTER_DATE"
+
+    git -C "$TMP/Custota" commit \
+        --quiet \
+        -F "$COMPAT_MESSAGE"
+)
+
+REPLAY_COMMIT="$(git -C "$TMP/Custota" rev-parse HEAD)"
+echo "Replay commit: $REPLAY_COMMIT"
+
+if [ -f "$ROOT/local.properties" ]; then
+    cp "$ROOT/local.properties" "$TMP/Custota/local.properties"
+elif [ -n "${ANDROID_HOME:-}" ]; then
+    printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$TMP/Custota/local.properties"
+elif [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+    printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > "$TMP/Custota/local.properties"
+else
+    echo "Android SDK location unavailable" >&2
+    exit 1
+fi
+
+if [ -f "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+fi
+
+command -v cargo >/dev/null
+cargo android --help >/dev/null 2>&1
+
+case "$VARIANT" in
+    debug)
+        GRADLE_TASK=zipDebug
+        DIST_DIR=debug
+        ;;
+    release)
+        GRADLE_TASK=zipRelease
+        DIST_DIR=release
+        ;;
+esac
+
+echo
+echo "[4/6] Building $VARIANT package..."
+
+(
+    cd "$TMP/Custota"
+    ./gradlew "$GRADLE_TASK"
+)
+
+ZIP="$(
+    find "$TMP/Custota/app/build/distributions/$DIST_DIR" \
+        -maxdepth 1 \
+        -type f \
+        -name "Custota-*-${VARIANT}.zip" \
+        -printf '%T@ %p\n' \
+        | sort -nr \
+        | head -1 \
+        | cut -d' ' -f2-
+)"
+
+if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
+    echo "Built package not found" >&2
+    exit 1
+fi
+
+echo
+echo "[5/6] Validating privileged package..."
+
+VALIDATION="$(
+python3 - "$ZIP" <<'VALIDATE_PY'
+import hashlib
+import json
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as zf:
+    manifest = json.loads(zf.read("custota-runtime.json"))
+
+    assert manifest["schemaVersion"] == 1
+    assert manifest["component"] == "custota-runtime"
+
+    runtime = manifest["runtime"]
+    assert runtime["bootEntrypoint"] == "post-fs-data.sh"
+    assert runtime["bootPhase"] == "post-fs-data"
+    assert "CUSTOTA_LOG_FILE" in runtime["environment"]
+    assert "CUSTOTA_SEAPP_CONTEXTS_DIR" in runtime["environment"]
+
+    control = manifest["externalControl"]
+    assert control["apiVersion"] == 1
+    assert control["permissionProtection"] == "signature"
+    assert control["permission"] == \
+        "com.chiller3.custota.permission.EXTERNAL_CONTROL"
+
+    for artifact in manifest["artifacts"]:
+        data = zf.read(artifact["path"])
+        assert len(data) == artifact["size"], artifact["path"]
+        assert hashlib.sha256(data).hexdigest() == artifact["sha256"], \
+            artifact["path"]
+
+    print("VERSION=" + manifest["version"])
+    print("VERSION_CODE=" + str(manifest["versionCode"]))
+    print("RUNTIME_SCHEMA=1")
+    print("EXTERNAL_API=1")
+    print("ARTIFACTS=" + str(len(manifest["artifacts"])))
+VALIDATE_PY
+)"
+
+printf '%s\n' "$VALIDATION"
+
+VERSION="$(printf '%s\n' "$VALIDATION" | sed -n 's/^VERSION=//p')"
+
+if [ -z "$VERSION" ]; then
+    echo "Could not determine package version" >&2
+    exit 1
+fi
+
+if ! find "$TMP/Custota/app/build" \
+    -type f \
+    -name 'ICustotaExternalService*' \
+    | grep -q .
+then
+    echo "External AIDL output missing" >&2
+    exit 1
+fi
+
+DEST_DIR="$ROOT/app/build/distributions/privileged/$VERSION"
+mkdir -p "$DEST_DIR"
+
+DEST="$DEST_DIR/$(basename "$ZIP")"
+cp "$ZIP" "$DEST"
+
+SHA256="$(sha256sum "$DEST" | awk '{print $1}')"
+
+printf '%s\n' \
+    "version=$VERSION" \
+    "variant=$VARIANT" \
+    "upstream_ref=$TARGET" \
+    "upstream=$TARGET_COMMIT" \
+    "privileged_compat=$COMPAT_REF" \
+    "privileged_replay=$REPLAY_COMMIT" \
+    "sha256=$SHA256" \
+    "runtime_schema=1" \
+    "external_api=1" \
+    > "$DEST_DIR/build-info.txt"
+
+printf '%s  %s\n' "$SHA256" "$(basename "$DEST")" \
+    > "$DEST.sha256"
+
+echo
+echo "[6/6] Complete"
+echo
+echo "PACKAGE=$DEST"
+echo "SHA256=$SHA256"
+echo "INFO=$DEST_DIR/build-info.txt"
