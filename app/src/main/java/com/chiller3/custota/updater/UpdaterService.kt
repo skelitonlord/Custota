@@ -22,20 +22,33 @@ import android.util.Log
 import androidx.annotation.UiThread
 import androidx.core.content.IntentCompat
 import com.chiller3.custota.Notifications
+import com.chiller3.custota.BuildConfig
+import com.chiller3.custota.external.ICustotaExternalService
 import com.chiller3.custota.Preferences
 import com.chiller3.custota.R
 import com.chiller3.custota.extension.isGuaranteedNetworkUri
 import com.chiller3.custota.extension.toSingleLineString
+import org.json.JSONArray
+import org.json.JSONObject
 
 class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var prefs: Preferences
     private lateinit var notifications: Notifications
 
+    @Volatile
     private var updaterThread: UpdaterThread? = null
+
+    @Volatile
     private var updaterAction: UpdaterThread.Action? = null
+
     private var silenceForPeriodic = false
+
+    @Volatile
     private var progressState: ProgressState? = null
+
+    @Volatile
+    private var lastResult: UpdaterThread.Result? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -44,7 +57,137 @@ class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
         notifications = Notifications(this)
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    private val externalBinder = object : ICustotaExternalService.Stub() {
+        override fun getApiVersion(): Int = EXTERNAL_API_VERSION
+
+        override fun getVersionName(): String = BuildConfig.VERSION_NAME
+
+        override fun getVersionCode(): Int = BuildConfig.VERSION_CODE
+
+        override fun getStatusJson(): String = externalStatusJson()
+
+        override fun monitor() {
+            scheduleExternal(UpdaterThread.Action.MONITOR)
+        }
+
+        override fun check() {
+            scheduleExternal(UpdaterThread.Action.CHECK)
+        }
+
+        override fun install() {
+            scheduleExternal(UpdaterThread.Action.INSTALL)
+        }
+
+        override fun installFull() {
+            scheduleExternal(UpdaterThread.Action.INSTALL_FULL)
+        }
+
+        override fun revert() {
+            scheduleExternal(UpdaterThread.Action.REVERT)
+        }
+
+        override fun pause() {
+            handler.post {
+                updaterThread?.isPaused = true
+                updateForegroundNotification(true)
+            }
+        }
+
+        override fun resume() {
+            handler.post {
+                updaterThread?.isPaused = false
+                updateForegroundNotification(true)
+            }
+        }
+
+        override fun cancel() {
+            handler.post {
+                updaterThread?.cancel()
+            }
+        }
+
+        override fun reboot() {
+            handler.post {
+                getSystemService(PowerManager::class.java).reboot(null)
+            }
+        }
+    }
+
+    override fun onBind(intent: Intent?): IBinder = externalBinder
+
+    private fun scheduleExternal(action: UpdaterThread.Action) {
+        handler.post {
+            UpdaterJob.scheduleImmediate(this, action)
+        }
+    }
+
+    private fun externalStatusJson(): String {
+        val thread = updaterThread
+        val action = updaterAction
+        val progress = progressState
+        val result = lastResult
+
+        val state = when {
+            progress != null -> progress.type.name.lowercase()
+            thread != null -> "running"
+            result == null -> "idle"
+            result is UpdaterThread.NothingToMonitor -> "idle"
+            result is UpdaterThread.UpdateAvailable -> "update_available"
+            result is UpdaterThread.UpdateUnnecessary -> "up_to_date"
+            result is UpdaterThread.UpdateSucceeded -> "succeeded"
+            result is UpdaterThread.UpdateCleanedUp -> "cleaned_up"
+            result is UpdaterThread.UpdateNeedReboot -> "need_reboot"
+            result is UpdaterThread.UpdateReverted -> "reverted"
+            result is UpdaterThread.UpdateCancelled -> "cancelled"
+            result is UpdaterThread.UpdateFailed -> "failed"
+            result is UpdaterThread.BrokenNetworkApi -> "failed"
+            else -> "unknown"
+        }
+
+        return JSONObject().apply {
+            put("apiVersion", EXTERNAL_API_VERSION)
+            put("version", BuildConfig.VERSION_NAME)
+            put("versionCode", BuildConfig.VERSION_CODE)
+            put("state", state)
+
+            put(
+                "action",
+                action?.name?.lowercase() ?: JSONObject.NULL,
+            )
+
+            put("paused", thread?.isPaused ?: false)
+
+            if (progress != null) {
+                put("progressType", progress.type.name.lowercase())
+                put("progressCurrent", progress.current)
+                put("progressMax", progress.max)
+            } else {
+                put("progressType", JSONObject.NULL)
+                put("progressCurrent", 0)
+                put("progressMax", 0)
+            }
+
+            when (result) {
+                is UpdaterThread.UpdateAvailable -> {
+                    put(
+                        "fingerprints",
+                        JSONArray(result.fingerprints),
+                    )
+                }
+
+                is UpdaterThread.UpdateFailed -> {
+                    put("error", result.errorMsg)
+                    put("incremental", result.isIncremental)
+                }
+
+                is UpdaterThread.BrokenNetworkApi -> {
+                    put("error", "broken_network_api")
+                }
+
+                else -> Unit
+            }
+        }.toString()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Received intent: $intent")
@@ -92,6 +235,8 @@ class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
             val action = IntentCompat.getParcelableExtra(
                 intent, EXTRA_ACTION, UpdaterThread.Action::class.java)!!
             val silent = intent.getBooleanExtra(EXTRA_SILENT, false)
+
+            lastResult = null
 
             if (action != UpdaterThread.Action.MONITOR) {
                 val otaSource = prefs.otaSource
@@ -377,6 +522,7 @@ class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
     override fun onUpdateResult(thread: UpdaterThread, result: UpdaterThread.Result) {
         handler.post {
             require(thread === updaterThread) { "Bad thread ($thread != $updaterThread)" }
+            lastResult = result
             notifyAlert(result)
             threadExited()
         }
@@ -403,6 +549,8 @@ class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
 
     companion object {
         private val TAG = UpdaterService::class.java.simpleName
+
+        const val EXTERNAL_API_VERSION = 1
 
         private val ACTION_START = "${UpdaterService::class.java.canonicalName}.start"
         private val ACTION_PAUSE = "${UpdaterService::class.java.canonicalName}.pause"

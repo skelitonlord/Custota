@@ -219,6 +219,13 @@ There are two parts to the SELinux changes:
 
 These changes help limit Custota's privileges to exactly what is needed and avoids potentially increasing the attack surface via other apps.
 
+### Portable runtime
+
+Module zips include `custota-runtime.json` for compatible privileged installers.
+The package also exposes a signature-protected external updater API.
+
+Magisk and KernelSU remain fully supported.
+
 ### TLS trust store
 
 Depending on the Android version, different components use different CA trust stores for validating certificates.

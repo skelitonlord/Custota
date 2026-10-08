@@ -9,6 +9,8 @@
 
 ### Unreleased
 
+* Add a portable runtime manifest and external control API for compatible privileged installers.
+
 ### Version 6.6
 
 * Improve compatibility with KernelSU metamodules that previously could lead to boot loops ([PR #218])

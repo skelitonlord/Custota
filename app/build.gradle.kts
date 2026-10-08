@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
+import java.security.MessageDigest
+
 import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.variant.VariantOutputConfiguration
 import com.android.build.gradle.internal.UsesSdkComponentsBuildService
@@ -449,6 +451,278 @@ androidComponents.onVariants { variant ->
         }
     }
 
+    val runtimeManifest = tasks.register("runtimeManifest${capitalized}") {
+        inputs.property("runtimeSchemaVersion", 1)
+        inputs.property("rootProject.name", rootProject.name)
+        inputs.property("variant.applicationId", variant.applicationId)
+        inputs.property("variant.name", variant.name)
+        inputs.property("variantVersionCode", variantVersionCode)
+        inputs.property("variantVersionName", variantVersionName)
+
+        inputs.files(moduleProp.map { it.outputs })
+        inputs.files(permissionsXml.map { it.outputs })
+        inputs.files(configXml.map { it.outputs })
+        inputs.files(seappContexts.map { it.outputs })
+        inputs.files(variantApkFiles)
+
+        val moduleDir = File(projectDir, "module")
+
+        inputs.files(
+            File(moduleDir, "boot_common.sh"),
+            File(moduleDir, "post-fs-data.sh"),
+        )
+
+        for ((_, task) in custotaSelinuxTasks) {
+            inputs.files(task.map { it.outputs.files })
+        }
+
+        dependsOn(moduleProp)
+        dependsOn(permissionsXml)
+        dependsOn(configXml)
+        dependsOn(seappContexts)
+        dependsOn(custotaSelinuxTasks.values)
+
+        val outputFile = variantDir.map {
+            it.file("custota-runtime.json")
+        }
+
+        outputs.file(outputFile)
+
+        doLast {
+            fun sha256(file: File): String {
+                val digest = MessageDigest.getInstance("SHA-256")
+
+                file.inputStream().use { input ->
+                    val buffer = ByteArray(1024 * 1024)
+
+                    while (true) {
+                        val count = input.read(buffer)
+
+                        if (count < 0) {
+                            break
+                        }
+
+                        digest.update(buffer, 0, count)
+                    }
+                }
+
+                return digest.digest()
+                    .joinToString("") { "%02x".format(it) }
+            }
+
+            val artifacts = org.json.JSONArray()
+
+            fun addArtifact(
+                archivePath: String,
+                role: String,
+                file: File,
+                mode: String,
+                activation: String,
+                abi: String? = null,
+                bootPhase: String? = null,
+            ) {
+                check(file.isFile) {
+                    "Runtime artifact does not exist: ${file.absolutePath}"
+                }
+
+                val entry = org.json.JSONObject()
+
+                entry.put("path", archivePath)
+                entry.put("role", role)
+                entry.put("activation", activation)
+                entry.put("sha256", sha256(file))
+                entry.put("size", file.length())
+                entry.put("mode", mode)
+
+                if (abi != null) {
+                    entry.put("abi", abi)
+                }
+
+                if (bootPhase != null) {
+                    entry.put("bootPhase", bootPhase)
+                }
+
+                artifacts.put(entry)
+            }
+
+            val permissionsFile =
+                permissionsXml.get().outputs.files.singleFile
+
+            val configFile =
+                configXml.get().outputs.files.singleFile
+
+            val seappContextsFile =
+                seappContexts.get().outputs.files.singleFile
+
+            val modulePropFile =
+                moduleProp.get().outputs.files.singleFile
+
+            addArtifact(
+                "module.prop",
+                "package_metadata",
+                modulePropFile,
+                "0644",
+                "metadata",
+            )
+
+            addArtifact(
+                "system/etc/permissions/${permissionsFile.name}",
+                "privapp_permissions",
+                permissionsFile,
+                "0644",
+                "system_overlay",
+            )
+
+            addArtifact(
+                "system/etc/sysconfig/${configFile.name}",
+                "system_config",
+                configFile,
+                "0644",
+                "system_overlay",
+            )
+
+            addArtifact(
+                "plat_seapp_contexts",
+                "seapp_contexts_snippet",
+                seappContextsFile,
+                "0644",
+                "boot_merge",
+            )
+
+            for (apkPath in variantApkFiles.get()) {
+                val apk = File(apkPath)
+
+                addArtifact(
+                    "system/priv-app/${variant.applicationId.get()}/${apk.name}",
+                    "privileged_app",
+                    apk,
+                    "0644",
+                    "system_overlay",
+                )
+            }
+
+            for ((abi, task) in custotaSelinuxTasks) {
+                val helper =
+                    task.get().outputs.files.singleFile
+
+                addArtifact(
+                    "custota-selinux.${abi}",
+                    "selinux_helper",
+                    helper,
+                    "0755",
+                    "boot_helper",
+                    abi = abi,
+                    bootPhase = "post-fs-data",
+                )
+            }
+
+            addArtifact(
+                "boot_common.sh",
+                "boot_library",
+                File(moduleDir, "boot_common.sh"),
+                "0644",
+                "boot_support",
+                bootPhase = "post-fs-data",
+            )
+
+            addArtifact(
+                "post-fs-data.sh",
+                "boot_script",
+                File(moduleDir, "post-fs-data.sh"),
+                "0755",
+                "boot_entrypoint",
+                bootPhase = "post-fs-data",
+            )
+
+            val root = org.json.JSONObject()
+
+            root.put("schemaVersion", 1)
+            root.put("component", "custota-runtime")
+            root.put(
+                "applicationId",
+                variant.applicationId.get(),
+            )
+            root.put(
+                "version",
+                variantVersionName.get(),
+            )
+            root.put(
+                "versionCode",
+                variantVersionCode.get(),
+            )
+            root.put("variant", variant.name)
+
+            root.put(
+                "requirements",
+                org.json.JSONObject()
+                    .put(
+                        "minimumAndroidSdk",
+                        android.defaultConfig.minSdk!!,
+                    )
+                    .put("privilegedSystemApp", true)
+                    .put("liveSelinuxPolicy", true)
+                    .put("seappContexts", true)
+                    .put("requiresReboot", true)
+            )
+
+            root.put(
+                "runtime",
+                org.json.JSONObject()
+                    .put(
+                        "bootEntrypoint",
+                        "post-fs-data.sh",
+                    )
+                    .put(
+                        "bootPhase",
+                        "post-fs-data",
+                    )
+                    .put(
+                        "environment",
+                        org.json.JSONObject()
+                            .put(
+                                "CUSTOTA_LOG_FILE",
+                                org.json.JSONObject()
+                                    .put("required", false)
+                                    .put(
+                                        "default",
+                                        "/data/local/tmp/custota.log",
+                                    )
+                            )
+                            .put(
+                                "CUSTOTA_SEAPP_CONTEXTS_DIR",
+                                org.json.JSONObject()
+                                    .put("required", false)
+                                    .put(
+                                        "default",
+                                        "/data/adb/modules",
+                                    )
+                            )
+                    )
+            )
+
+            root.put(
+                "externalControl",
+                org.json.JSONObject()
+                    .put("apiVersion", 1)
+                    .put(
+                        "service",
+                        "${variant.applicationId.get()}/com.chiller3.custota.updater.UpdaterService",
+                    )
+                    .put(
+                        "permission",
+                        "${variant.applicationId.get()}.permission.EXTERNAL_CONTROL",
+                    )
+                    .put("permissionProtection", "signature")
+            )
+
+            root.put("artifacts", artifacts)
+
+            outputFile.get().asFile.writeText(
+                root.toString(4) + "\n"
+            )
+        }
+    }
+
     tasks.register<Zip>("zip${capitalized}") {
         inputs.property("rootProject.name", rootProject.name)
         inputs.property("variant.applicationId", variant.applicationId)
@@ -465,6 +739,7 @@ androidComponents.onVariants { variant ->
         isReproducibleFileOrder = true
 
         from(moduleProp.map { it.outputs })
+        from(runtimeManifest.map { it.outputs })
         from(permissionsXml.map { it.outputs }) {
             into("system/etc/permissions")
         }

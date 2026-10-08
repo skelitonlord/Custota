@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2023-2024 Andrew Gunnerson
 # SPDX-License-Identifier: GPL-3.0-only
 
-source "${0%/*}/boot_common.sh" /data/local/tmp/custota.log
+# The runtime loader may override where Custota writes its early-boot log.
+# Magisk/KernelSU installations continue to use the historical default.
+log_file=${CUSTOTA_LOG_FILE:-/data/local/tmp/custota.log}
+
+source "${0%/*}/boot_common.sh" "${log_file}"
 
 # toybox's `mountpoint` command only works for directories, but bind mounts can
 # be files too.
@@ -34,9 +38,21 @@ header Creating custota_app domain
 header Updating seapp_contexts
 
 mkdir -p "${mod_dir}/system/etc/selinux"
-paste -s -d '\n' \
-    /system/etc/selinux/plat_seapp_contexts \
-    /data/adb/modules/*/plat_seapp_contexts \
+
+# Magisk/KernelSU store module-provided seapp_contexts snippets under
+# /data/adb/modules. Other runtime loaders can provide an equivalent directory
+# without requiring Custota to know which root/runtime framework is in use.
+seapp_contexts_dir=${CUSTOTA_SEAPP_CONTEXTS_DIR:-/data/adb/modules}
+
+set -- /system/etc/selinux/plat_seapp_contexts
+
+for file in "${seapp_contexts_dir}"/*/plat_seapp_contexts; do
+    if [[ -f "${file}" ]]; then
+        set -- "${@}" "${file}"
+    fi
+done
+
+paste -s -d '\n' "${@}" \
     | awk '!seen[$0]++' \
     > "${mod_dir}/system/etc/selinux/plat_seapp_contexts"
 
