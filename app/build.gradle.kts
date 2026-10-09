@@ -703,7 +703,7 @@ androidComponents.onVariants { variant ->
             root.put(
                 "externalControl",
                 org.json.JSONObject()
-                    .put("apiVersion", 1)
+                    .put("apiVersion", 2)
                     .put(
                         "service",
                         "${variant.applicationId.get()}/com.chiller3.custota.updater.UpdaterService",

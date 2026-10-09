@@ -48,22 +48,31 @@ esac
 
 git -C "$ROOT" remote get-url upstream >/dev/null
 
+COMPAT_BASE_REF="$(
+    git -C "$ROOT" log master \
+        --reverse \
+        --format='%H' \
+        --grep='^Add privileged compatibility interface$' \
+        | head -1
+)"
+
 COMPAT_REF="$(
     git -C "$ROOT" log master \
         --format='%H' \
-        --grep='^Add privileged compatibility interface$' \
+        --grep='privileged compatibility interface$' \
         -1
 )"
 
-if [ -z "$COMPAT_REF" ]; then
-    echo "Privileged compatibility commit not found" >&2
+if [ -z "$COMPAT_BASE_REF" ] || [ -z "$COMPAT_REF" ]; then
+    echo "Privileged compatibility range not found" >&2
     exit 1
 fi
 
 echo "=== Custota privileged package ==="
 echo "Variant:       $VARIANT"
 echo "Target:        ${TARGET:-latest upstream release}"
-echo "Compatibility: $COMPAT_REF"
+echo "Compatibility base: $COMPAT_BASE_REF"
+echo "Compatibility:      $COMPAT_REF"
 echo
 
 echo "[1/6] Fetching upstream..."
@@ -137,7 +146,7 @@ COMPAT_MESSAGE="$TMP/privileged-compat-message.txt"
 
 git -C "$ROOT" diff \
     --binary \
-    "${COMPAT_REF}^" \
+    "${COMPAT_BASE_REF}^" \
     "$COMPAT_REF" \
     -- "${COMPAT_PATHS[@]}" \
     > "$COMPAT_PATCH"
@@ -278,7 +287,7 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
     assert "CUSTOTA_SEAPP_CONTEXTS_DIR" in runtime["environment"]
 
     control = manifest["externalControl"]
-    assert control["apiVersion"] == 1
+    assert control["apiVersion"] == 2
     assert control["permissionProtection"] == "signature"
     assert control["permission"] == \
         "com.chiller3.custota.permission.EXTERNAL_CONTROL"
@@ -292,7 +301,7 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
     print("VERSION=" + manifest["version"])
     print("VERSION_CODE=" + str(manifest["versionCode"]))
     print("RUNTIME_SCHEMA=1")
-    print("EXTERNAL_API=1")
+    print("EXTERNAL_API=2")
     print("ARTIFACTS=" + str(len(manifest["artifacts"])))
 VALIDATE_PY
 )"
@@ -332,7 +341,7 @@ printf '%s\n' \
     "privileged_replay=$REPLAY_COMMIT" \
     "sha256=$SHA256" \
     "runtime_schema=1" \
-    "external_api=1" \
+    "external_api=2" \
     > "$DEST_DIR/build-info.txt"
 
 printf '%s  %s\n' "$SHA256" "$(basename "$DEST")" \

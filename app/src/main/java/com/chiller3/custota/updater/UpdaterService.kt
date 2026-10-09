@@ -66,6 +66,21 @@ class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
 
         override fun getStatusJson(): String = externalStatusJson()
 
+        override fun getOtaSource(): String =
+            prefs.otaSource?.toString() ?: ""
+
+        override fun setOtaSource(uri: String) {
+            require(uri.isNotBlank()) {
+                "OTA source URI must not be blank"
+            }
+
+            prefs.otaSource = Uri.parse(uri)
+        }
+
+        override fun clearOtaSource() {
+            prefs.otaSource = null
+        }
+
         override fun monitor() {
             scheduleExternal(UpdaterThread.Action.MONITOR)
         }
@@ -550,7 +565,7 @@ class UpdaterService : Service(), UpdaterThread.UpdaterThreadListener {
     companion object {
         private val TAG = UpdaterService::class.java.simpleName
 
-        const val EXTERNAL_API_VERSION = 1
+        const val EXTERNAL_API_VERSION = 2
 
         private val ACTION_START = "${UpdaterService::class.java.canonicalName}.start"
         private val ACTION_PAUSE = "${UpdaterService::class.java.canonicalName}.pause"

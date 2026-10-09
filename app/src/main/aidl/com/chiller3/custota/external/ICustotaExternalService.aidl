@@ -16,6 +16,24 @@ interface ICustotaExternalService {
 
     String getStatusJson();
 
+    /**
+     * Return the configured OTA source URI, or an empty string if unset.
+     */
+    String getOtaSource();
+
+    /**
+     * Configure the OTA source URI.
+     *
+     * The caller must grant this package read access before invoking
+     * this method for content:// URIs.
+     */
+    void setOtaSource(String uri);
+
+    /**
+     * Clear the configured OTA source.
+     */
+    void clearOtaSource();
+
     void monitor();
 
     void check();
